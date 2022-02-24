@@ -9,18 +9,13 @@ let milk: number;
 let cookie: string = '', res: any = '', UserName: string, index: number;
 
 async function main() {
-  let cookiesArr: any = await requireConfig();
+  let cookiesArr: string[] = await requireConfig();
   for (let i = 0; i < cookiesArr.length; i++) {
     try {
       cookie = cookiesArr[i];
       UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
       index = i + 1;
-      let {isLogin, nickName}: any = await TotalBean(cookie)
-      if (!isLogin) {
-        notify.sendNotify(__filename.split('/').pop(), `cookie已失效\n京东账号${index}：${nickName || UserName}`)
-        continue
-      }
-      console.log(`\n开始【京东账号${index}】${nickName || UserName}\n`);
+      console.log(`\n开始【京东账号${index}】${UserName}\n`);
 
       await getIsvToken();
       await getIsvToken2();
@@ -91,8 +86,6 @@ async function main() {
     } catch (e) {
       console.log(e)
     }
-
-    break
   }
 }
 

@@ -1,72 +1,151 @@
 /**
  * 京东快递更新通知
- * cron: 0-23/2 * * * *
+ * cron: 0 0-23/4 * * *
  */
 
-import axios from "axios";
-import * as path from "path";
-import {sendNotify} from './sendNotify';
-import {accessSync, readFileSync, writeFileSync} from "fs";
-import {requireConfig, exceptCookie, wait} from "./TS_USER_AGENTS";
+import axios from "axios"
+import * as path from "path"
+import {sendNotify} from './sendNotify'
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from "fs"
+import USER_AGENT, {requireConfig, exceptCookie, wait} from "./TS_USER_AGENTS"
+import {pushplus} from "./utils/pushplus";
 
-let cookie: string = '', UserName: string, index: number, allMessage: string = '', res: any = '', message: string = '';
+let cookie: string = '', UserName: string, allMessage: string = '', res: any = ''
 
 !(async () => {
-  let cookiesArr: any = await requireConfig();
-  let except: string[] = exceptCookie(path.basename(__filename));
-  let orders: any;
+  let cookiesArr: string[] = await requireConfig()
+  let except: string[] = exceptCookie(path.basename(__filename))
+  let orders: any = {}, pushplusArr: { pt_pin: string, pushplus: string }[], pushplusUser: string[] = []
   try {
-    accessSync('./jd_track.json')
-    orders = JSON.parse(readFileSync('./jd_track.json').toString() || '{}')
+    pushplusArr = JSON.parse(readFileSync('./utils/account.json').toString())
   } catch (e) {
-    orders = {}
+    console.log('utils/pushplus.json load failed')
   }
-  for (let i = 0; i < cookiesArr.length; i++) {
-    cookie = cookiesArr[i];
+  for (let user of pushplusArr) {
+    if (user.pushplus)
+      pushplusUser.push(decodeURIComponent(user.pt_pin))
+  }
+  if (existsSync('./json')) {
+    if (existsSync('./json/jd_track.json')) {
+      orders = JSON.parse(readFileSync('./json/jd_track.json').toString() || '{}')
+    } else {
+      writeFileSync('./json/jd_track.json', '{}')
+    }
+  } else {
+    mkdirSync('./json')
+    writeFileSync('./json/jd_track.json', '{}')
+  }
+  for (let [index, value] of cookiesArr.entries()) {
+    cookie = value
     UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-    index = i + 1;
-    console.log(`\n开始【京东账号${index}】${UserName}\n`);
+    console.log(`\n开始【京东账号${index + 1}】${UserName}\n`)
 
     if (except.includes(encodeURIComponent(UserName))) {
       console.log('已设置跳过')
       continue
     }
 
-    message = ''
+    let message: string = '', markdown: string = '', i: number = 1
+
     res = await getOrderList()
+    await wait(2000)
+
     for (let order of res.orderList) {
-      let orderId: string = order['orderId'], title: string = order['productList'][0]['title'], t: string = order['progressInfo']['tip'], status: string = order['progressInfo']['content']
-      if (status.match(/(?=签收|已取走|已暂存)/)) continue
-      console.log(title)
-      console.log('\t', t, status)
-      console.log()
-      if (Object.keys(orders).indexOf(orderId) > -1 && orders[orderId]['status'] !== status) {
-        message += `${title}\n${t}  ${status}\n\n`
-      }
-      orders[orderId] = {
-        title, t, status
+      let orderId: string = order.orderId
+      let orderType: string = order.orderType
+      let title: string = order.productList[0].title
+      let t: string = order.progressInfo?.tip || null
+      let status: string = order.progressInfo?.content || null
+
+      res = await getWuliu(orderId, orderType)
+      let carrier: string = res.carrier, carriageId: string = res.carriageId
+
+      if (t && status) {
+        if (status.match(/(?=签收|已取走|已暂存)/))
+          continue
+        if (!pushplusUser.includes(UserName)) {
+          console.log(title)
+          console.log('\t', t, status)
+          console.log()
+        } else {
+          console.log('隐私保护，不显示日志')
+        }
+        if (!Object.keys(orders).includes(orderId) || orders[orderId]['status'] !== status) {
+          if (pushplusUser.includes(UserName)) {
+            console.log('+ pushplus')
+            markdown += `${i++}. ${title}\n\t- ${carrier}  ${carriageId}\n\t- ${t}  ${status}\n`
+          } else {
+            console.log('+ sendNotify')
+            message += `${title}\n${carrier}  ${carriageId}\n${t}  ${status}\n\n`
+          }
+        }
+        orders[orderId] = {
+          user: UserName, title, t, status, carrier, carriageId
+        }
       }
     }
+
     if (message) {
-      message = `<京东账号${i + 1}>  ${UserName}\n\n${message}`
+      message = `<京东账号${index + 1}>  ${UserName}\n\n${message}`
       allMessage += message
+    }
+    if (markdown) {
+      markdown = `#### <${UserName}>\n${markdown}`
+      await pushplus('京东快递更新', markdown, 'markdown')
     }
     await wait(1000)
   }
-  writeFileSync('./jd_track.json', JSON.stringify(orders))
+
+
+  let account: { pt_pin: string, remarks: string }[] = []
+  try {
+    account = JSON.parse(readFileSync('./utils/account.json').toString())
+  } catch (e) {
+    console.log('utils/account.json load failed')
+  }
+
+  // 删除已签收
+  Object.keys(orders).map(key => {
+    if (orders[key].status.match(/(?=签收|已取走|已暂存)/)) {
+      delete orders[key]
+    }
+    if (pushplusUser.includes(orders[key].user)) {
+      orders[key].title = '******'
+    }
+  })
+
+  // 替换通知中的用户名为备注
+  orders = JSON.stringify(orders, null, 2)
+  for (let acc of account) {
+    orders = orders.replace(new RegExp(decodeURIComponent(acc.pt_pin), 'g'), acc.remarks)
+  }
+  writeFileSync('./json/jd_track.json', orders)
   if (allMessage)
     await sendNotify('京东快递更新', allMessage)
 })()
 
 async function getOrderList() {
-  let t: number = Date.now();
+  let t: number = Date.now()
   let {data} = await axios.get(`https://wq.jd.com/bases/orderlist/list?order_type=2&start_page=1&last_page=0&page_size=10&callersource=mainorder&t=${t}&sceneval=2&_=${t + 1}&sceneval=2`, {
     headers: {
       'authority': 'wq.jd.com',
-      'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
+      'user-agent': USER_AGENT,
       'referer': 'https://wqs.jd.com/',
       'cookie': cookie
     }
   })
+  return data
+}
+
+async function getWuliu(orderId: string, orderType: string) {
+  let {data} = await axios.get(`https://wq.jd.com/bases/wuliudetail/dealloglist?deal_id=${orderId}&orderstate=15&ordertype=${orderType}&t=${Date.now()}&sceneval=2`, {
+    headers: {
+      'authority': 'wq.jd.com',
+      'user-agent': USER_AGENT,
+      'referer': 'https://wqs.jd.com/',
+      'cookie': cookie
+    }
+  })
+  await wait(1000)
   return data
 }

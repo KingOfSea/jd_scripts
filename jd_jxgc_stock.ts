@@ -1,31 +1,24 @@
 /**
- * 显示京喜工厂当前可生产商品
+ * 京喜工厂：肯德基、沃尔玛
  * cron: 0 * * * *
  */
 
 import axios from "axios";
-import USER_AGENT, {h5st, requireConfig, requestAlgo} from "./TS_USER_AGENTS";
+import {requireConfig, requestAlgo, o2s, wait, randomWord} from "./TS_USER_AGENTS";
 import {sendNotify} from './sendNotify'
-import {accessSync, readFileSync, writeFileSync} from "fs";
 
-let cookie: string = '', res: any = '', UserName: string, message: string = '';
-
+let cookie: string = '', res: any = '', message: string = '';
 
 !(async () => {
   await requestAlgo(10001)
-  let cookiesArr: any = await requireConfig();
-  cookie = cookiesArr[0];
-  UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-  console.log(`\n开始【京东账号1】${UserName}\n`);
+  let cookiesArr: string[] = await requireConfig();
+  cookie = cookiesArr[Math.floor(Math.random() * cookiesArr.length)];
 
-  let exist: string[];
-  try {
-    accessSync('jxgc_stock.json')
-    exist = JSON.parse(readFileSync('jxgc_stock.json').toString())
-  } catch (e) {
-    exist = []
+  /*
+  let exist: string[] = [];
+  if (existsSync('json/jxgc_stock.json')) {
+    exist = JSON.parse(readFileSync('./json/jxgc_stock.json').toString() || '[]')
   }
-
   res = await api();
   let current: string[] = []
   for (let t of res.data.commodityList) {
@@ -35,24 +28,56 @@ let cookie: string = '', res: any = '', UserName: string, message: string = '';
       message += t.name + '\n'
     }
   }
-  writeFileSync('./jxgc_stock.json', JSON.stringify(current))
+  writeFileSync('./json/jxgc_stock.json', JSON.stringify(current))
   if (message) {
     console.log('send...')
     sendNotify('京喜工厂可生产', message)
   }
+   */
+  res = await api();
+  await wait(1000)
+
+  let keywords: string[] = ['KFC', 'kfc', '肯德基', '沃尔玛']
+  for (let t of res.data.commodityList) {
+    let name: string = t.name, commodityId: number = t.commodityId
+    res = await api(commodityId)
+    await wait(1000)
+
+    let desp: string = res.data.commodityList[0].description
+    if (desp.indexOf('红包') > -1) {
+      desp = desp.match(/奖[励|品]以(.*)发放/)[1]
+      message += `${name} ${desp}\n`
+    } else if (desp.indexOf('支付') > -1) {
+      desp = desp.match(/完成需(.*元)/)![1]
+    } else {
+      o2s(res)
+    }
+    console.log(name, desp)
+
+    for (let keyword of keywords) {
+      if (name.indexOf(keyword) > -1) {
+        await sendNotify("京喜工厂", name)
+        break
+      }
+    }
+  }
+  if (message) {
+    sendNotify('京喜工厂送红包', message)
+  }
 })()
 
-async function api() {
-  let url: string = `https://wq.jd.com/dreamfactory/diminfo/GetCommodityList?zone=dream_factory&flag=2&pageNo=1&pageSize=12&_time=${Date.now()}&_stk=_time%2Cflag%2CpageNo%2CpageSize%2Czone&_ste=1&_=${Date.now()}&sceneval=2`
-  url = h5st(url, '_time,flag,pageNo,pageSize,zone', {}, 10001)
+async function api(commodityId?: number) {
+  let t = Date.now()
+  let url: string = commodityId
+    ? `https://m.jingxi.com/dreamfactory/diminfo/GetCommodityDetails?zone=dream_factory&commodityId=${commodityId}&_time=${t}&_ts=${t}&_=${t}&sceneval=2&g_login_type=1&callback=jsonpCBK${randomWord()}&g_ty=ls`
+    : `https://m.jingxi.com/dreamfactory/diminfo/GetCommodityList?zone=dream_factory&flag=2&pageNo=1&pageSize=12&_time=${t}&_ts=${t}&_=${t}&sceneval=2&g_login_type=1&callback=jsonpCBK${randomWord()}&g_ty=ls`
   let {data}: any = await axios.get(url, {
     headers: {
-      'Host': 'wq.jd.com',
-      "User-Agent": USER_AGENT,
-      'accept-language': 'zh-cn',
-      'referer': 'https://wqsd.jd.com/pingou/dream_factory/index.html',
-      'cookie': cookie
+      'Host': 'm.jingxi.com',
+      'User-Agent': 'jdpingou;',
+      'Referer': 'https://st.jingxi.com/',
+      'Cookie': cookie
     }
   })
-  return data
+  return JSON.parse(data.match(/jsonpCBK.?\((.*)/)[1])
 }

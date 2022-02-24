@@ -5,40 +5,30 @@
  */
 
 import axios from 'axios';
-import {requireConfig, requestAlgo, wait, getRandomNumberByRange, h5st} from './TS_USER_AGENTS';
-import {readFileSync, writeFileSync, accessSync} from "fs";
+import {readFileSync, writeFileSync, existsSync} from "fs";
+import {requireConfig, wait, getRandomNumberByRange, randomWord, randomString} from './TS_USER_AGENTS';
+import {requestAlgo, geth5st} from "./utils/V3";
+import {token} from './utils/jd_jxmc.js'
+import {sendNotify} from './sendNotify'
 
-const notify = require('./sendNotify'), jxmcToken = require('./utils/jd_jxmc.js').token;
-let cookie: string = '', res: any = '', UserName: string;
+let cookie: string = '', res: any = '', UserName: string, jxToken: { farm_jstoken: string, timestamp: string, phoneid: string };
 
 !(async () => {
-  await requestAlgo();
-  let cookiesArr: any = await requireConfig();
+  await requestAlgo('00df8');
+  let cookiesArr: string[] = await requireConfig();
   cookie = cookiesArr[getRandomNumberByRange(0, cookiesArr.length)];
   UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-  try {
-    accessSync('./jxmc_stock.json')
-  } catch (e) {
-    writeFileSync('./jxmc_stock.json', '{}', 'utf-8')
+  if (!existsSync('./json/jxmc_stock.json')) {
+    writeFileSync('./json/jxmc_stock.json', '{}', 'utf-8')
   }
-  let exist: any = readFileSync('./jxmc_stock.json', 'utf-8')
+  let exist: object
   try {
-    exist = JSON.parse(exist)
+    exist = JSON.parse(readFileSync('./json/jxmc_stock.json', 'utf-8'))
   } catch (e) {
     exist = {}
   }
-  let items: string = '', message: string = '', token = await jxmcToken(cookie);
-
-  res = await api('queryservice/GetGoodsListV2',
-    'activeid,activekey,channel,jxmc_jstoken,phoneid,sceneid,timestamp', {
-      activeid: 'jxmc_active_0001',
-      activekey: 'null',
-      jxmc_jstoken: token.farm_jstoken,
-      timestamp: token.timestamp,
-      phoneid: token.phoneid
-    })
-  await wait(2000);
-
+  let items: string = '', message: string = ''
+  res = await api('queryservice/GetGoodsListV2', 'activeid,activekey,channel,jxmc_jstoken,phoneid,sceneid,timestamp', {})
   for (let good of res.data.goodslist) {
     if (!Object.keys(exist).includes(good.prizepool)) {
       items += good.prizepool + ','
@@ -69,7 +59,8 @@ let cookie: string = '', res: any = '', UserName: string;
       items = ''
     }
   }
-  writeFileSync('./jxmc_stock.json', JSON.stringify(exist, null, 2), 'utf-8')
+  console.log(exist)
+  writeFileSync('./json/jxmc_stock.json', JSON.stringify(exist, null, 2), 'utf-8')
   for (let j of Object.keys(exist)) {
     if (allItems.indexOf(j) > -1) {
       message += exist[j].name + '\t' + exist[j].egg + '\n'
@@ -77,7 +68,7 @@ let cookie: string = '', res: any = '', UserName: string;
   }
   console.log(message)
   if (message) {
-    await notify.sendNotify('京喜牧场兑换', message)
+    await sendNotify('京喜牧场兑换', message)
   }
 })()
 
@@ -90,39 +81,50 @@ interface Params {
   phoneid?: string
 }
 
-function api(fn: string, stk: string, params: Params = {}) {
-  return new Promise(async (resolve, reject) => {
-    let url = `https://m.jingxi.com/jxmc/${fn}?channel=7&sceneid=1001&_stk=${encodeURIComponent(stk)}&_ste=1&sceneval=2`
-    url = h5st(url, stk, params, 10028)
-    try {
-      let {data}: any = await axios.get(url, {
-        headers: {
-          'Cookie': cookie,
-          'Host': 'm.jingxi.com',
-          'User-Agent': 'jdpingou;',
-          'Referer': 'https://st.jingxi.com/',
-        }
-      })
-      resolve(data)
-    } catch (e) {
-      reject(401)
+async function api(fn: string, stk: string, params: Params = {}) {
+  jxToken = await token(cookie)
+  let url: string, t: { key: string, value: string } [] = [
+    {key: 'activeid', value: 'jxmc_active_0001'},
+    {key: 'activekey', value: 'null'},
+    {key: 'channel', value: '7'},
+    {key: 'sceneid', value: '1001'},
+    {key: 'jxmc_jstoken', value: jxToken.farm_jstoken},
+    {key: 'timestamp', value: jxToken.timestamp},
+    {key: 'phoneid', value: jxToken.phoneid},
+  ]
+  url = `https://m.jingxi.com/jxmc/${fn}?channel=7&sceneid=1001&_stk=${encodeURIComponent(stk)}&_ste=1&sceneval=2&g_login_type=1&callback=jsonpCBK${randomWord()}&g_ty=ls`
+  for (let [key, value] of Object.entries(params)) {
+    t.push({key, value})
+    url += `&${key}=${value}`
+  }
+  let h5st = geth5st(t, '00df8')
+  url += `&h5st=${encodeURIComponent(h5st)}`
+  let {data}: any = await axios.get(url, {
+    headers: {
+      'Host': 'm.jingxi.com',
+      'Accept': '*/*',
+      'Connection': 'keep-alive',
+      'User-Agent': `jdpingou;iPhone;5.14.2;${getRandomNumberByRange(12, 16)}.${getRandomNumberByRange(0, 3)};${randomString(40)};`,
+      'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
+      'Referer': 'https://st.jingxi.com/',
+      'Cookie': cookie
     }
   })
+  return JSON.parse(data.match(/jsonpCBK.?\((.*)/)[1])
 }
 
-function getEgg(items: string) {
-  items = items.substr(0, items.length - 1)
-  let rnd = "abcdefhijkmnprstwxyz".charAt(Math.floor(Math.random() * 4)).toUpperCase();
-  return new Promise(async resolve => {
-    let {data}: any = await axios.get(`https://m.jingxi.com/active/queryprizedetails?actives=${items}&_=${Date.now()}&sceneval=2&g_login_type=1&callback=jsonpCBK${rnd}&g_ty=ls`, {
-      headers: {
-        'Cookie': cookie,
-        'Host': 'm.jingxi.com',
-        'User-Agent': 'jdpingou;',
-        'Referer': 'https://st.jingxi.com/pingou/jxmc/index.html',
-      }
-    })
-    data = JSON.parse(data.replace(`try{ jsonpCBK${rnd}(`, '').replace(');}catch(e){}', ''))
-    resolve(data)
+async function getEgg(items: string) {
+  items = items.substring(0, items.length - 1)
+  let {data} = await axios.get(`https://m.jingxi.com/active/queryprizedetails?actives=${items}&_=${Date.now()}&sceneval=2&g_login_type=1&callback=jsonpCBK${randomWord()}&g_ty=ls`, {
+    headers: {
+      'Host': 'm.jingxi.com',
+      'Accept': '*/*',
+      'Connection': 'keep-alive',
+      'User-Agent': `jdpingou;iPhone;5.14.2;${getRandomNumberByRange(12, 16)}.${getRandomNumberByRange(0, 3)};${randomString(40)};`,
+      'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
+      'Referer': 'https://st.jingxi.com/',
+      'Cookie': cookie
+    }
   })
+  return JSON.parse(data.match(/jsonpCBK.?\(([\s\S]*)\);/)[1])
 }
