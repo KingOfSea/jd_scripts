@@ -65,7 +65,5 @@
     {"config":"55 23 * * * https://raw.githubusercontent.com/KingOfSea/jd_scripts/main/jd_unsubscribe.js, tag=取关京东店铺商品, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/jd.png, enabled=true", "addons":"https://raw.githubusercontent.com/KingOfSea/jd_scripts/main/QuantumultX/cookies.conf"},
     {"config":"15 17 * * * https://raw.githubusercontent.com/KingOfSea/jd_scripts/main/backUp/xmSport.js, tag=小米运动, img-url=https://raw.githubusercontent.com/58xinian/icon/master/xmyd.png, enabled=true", "addons":"https://raw.githubusercontent.com/KingOfSea/jd_scripts/main/QuantumultX/cookies.conf"},
     {"config":"0 0-23/2 * * * https://raw.githubusercontent.com/KingOfSea/jd_scripts/main/jd_EsportsManager.js, tag=电竞经理, img-url=https://raw.githubusercontent.com/KingOfSea/jd_scripts_demo/main/jd_EsportsManager.png, enabled=true", "addons":"https://raw.githubusercontent.com/KingOfSea/jd_scripts/main/QuantumultX/cookies.conf"}
->>>>>>>-HEAD:Quantumult
-cripts/main/QuantumultX/cookies.conf"}
   ]
 }
