@@ -1,55 +1,81 @@
-/**
- * 健康社区
- * https://h5.m.jd.com/babelDiy/Zeus/D2CwCLVmaP3QonubWFJeTVhYRyT/index.html
- * cron: 35 0,6,18 * * *
- */
+import {User, JDHelloWorld} from "./TS_JDHelloWorld";
 
-import axios from 'axios';
-import USER_AGENT, {exceptCookie, requireConfig, wait} from "./TS_USER_AGENTS";
-import * as path from "path";
+class Health extends JDHelloWorld {
+  user: User
+  shareCodeSelf: string[] = []
+  shareCodePool: string [] = []
 
-let cookie: string = '', res: any = '', UserName: string
+  constructor() {
+    super();
+  }
 
-!(async () => {
-  let cookiesArr: string[] = await requireConfig();
-  let except: string[] = exceptCookie(path.basename(__filename));
+  async init() {
+    await this.run(new Health, this.help)
+  }
 
-  for (let [index, value] of cookiesArr.entries()) {
-    cookie = value;
-    UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-    console.log(`\n开始【京东账号${index + 1}】${UserName}\n`);
+  async api(fn: string, body: object) {
+    return await this.post('https://api.m.jd.com/', `functionId=${fn}&body=${encodeURIComponent(JSON.stringify(body))}&client=wh5&clientVersion=1.0.0&uuid=`, {
+      'Host': 'api.m.jd.com',
+      'Origin': 'https://h5.m.jd.com',
+      'User-Agent': this.user.UserAgent,
+      'Referer': 'https://h5.m.jd.com/',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Cookie': this.user.cookie
+    })
+  }
 
-    if (except.includes(encodeURIComponent(UserName))) {
-      console.log('已设置跳过')
-      continue
+  async runTimes(code: string) {
+    try {
+      let data = await this.get(`https://api.jdsharecode.xyz/api/runTimes0701?activityId=health&sharecode=${code}`)
+      console.log(data)
+    } catch (e) {
+      await this.wait(5000)
     }
+  }
 
-    for (let j = 0; j < 3; j++) {
-      res = await api('jdhealth_getTaskDetail', {"buildingId": "", "taskId": "", "channelId": 1})
+  async main(user: User) {
+    this.user = user
+    let res: any
+    res = await this.api('jdhealth_getHomeData', {})
+    if (!res.data?.result) {
+      return
+    }
+    if (res.data.result.popupInfo.continuousSignInfo) {
+      res = await this.api('jdhealth_collectScore', {"taskToken": res.data.result.popupInfo.continuousSignInfo.signInTaskToken, "taskId": res.data.result.continuousSignTaskId, "actionType": "0"})
+      if (res.data.bizCode === 0) {
+        console.log('签到成功', res.data.result.acquiredScore)
+      }
+    }
+    for (let i = 0; i < 1; i++) {
+      res = await this.api('jdhealth_getTaskDetail', {"buildingId": "", "taskId": "", "channelId": 1})
       try {
         for (let t of res.data.result.taskVos) {
           if (t.status === 1 || t.status === 3) {
             console.log(t.taskName)
+            if (t.taskName.includes('打卡') && t.threeMealInfoVos[0].status === 1) {
+              let data: any = await this.api('jdhealth_collectScore', {"taskToken": t.threeMealInfoVos[0].taskToken, "taskId": t.taskId, "actionType": 0})
+              if (res.data.bizCode === 0)
+                console.log('打卡成功', parseInt(data.data.result.score))
+              else
+                console.log('打卡失败', data.data.bizMsg)
+              await this.wait(1000)
+            }
+
             for (let tp of t.productInfoVos || t.followShopVo || t.shoppingActivityVos || []) {
               if (tp.status === 1) {
                 console.log('\t', tp.skuName || tp.shopName || tp.title)
-                if (t.taskName.includes('早睡打卡') && t.taskBeginTime < Date.now() && t.taskEndTime > Date.now()) {
-                  res = await api('jdhealth_collectScore', {"taskToken": tp.taskToken, "taskId": t.taskId, "actionType": 1})
-                  await wait(2000)
-                  console.log('\t', res.data.bizMsg)
-                }
                 if (t.waitDuration) {
-                  res = await api('jdhealth_collectScore', {"taskToken": tp.taskToken, "taskId": t.taskId, "actionType": 1})
+                  res = await this.api('jdhealth_collectScore', {"taskToken": tp.taskToken, "taskId": t.taskId, "actionType": 1})
                   console.log('\t', res.data.bizMsg)
-                  await wait(t.waitDuration * 1000)
+                  await this.wait(t.waitDuration * 1000)
                 }
-                res = await api('jdhealth_collectScore', {"taskToken": tp.taskToken, "taskId": t.taskId, "actionType": 0})
+                res = await this.api('jdhealth_collectScore', {"taskToken": tp.taskToken, "taskId": t.taskId, "actionType": 0})
                 if (res.data.bizMsg.includes('做完')) {
                   console.log(res.data.bizMsg)
                   break
                 } else {
                   console.log(res.data.bizMsg, parseInt(res.data.result.score))
-                  await wait(1500)
+                  await this.wait(1500)
                 }
               }
             }
@@ -57,23 +83,53 @@ let cookie: string = '', res: any = '', UserName: string
         }
       } catch (e) {
         console.log('Error', e)
-        break
       }
-      await wait(3000)
+      await this.wait(3000)
     }
   }
-})();
 
-async function api(fn: string, body: object) {
-  let {data} = await axios.post('https://api.m.jd.com/', `functionId=${fn}&body=${encodeURIComponent(JSON.stringify(body))}&client=wh5&clientVersion=1.0.0&uuid=`, {
-    headers: {
-      'Host': 'api.m.jd.com',
-      'Origin': 'https://h5.m.jd.com',
-      'User-Agent': USER_AGENT,
-      'Referer': 'https://h5.m.jd.com/',
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Cookie': cookie
+  async help(users: User[]) {
+    let res: any
+    for (let user of users) {
+      this.user = user
+      console.log(`\n开始【京东账号${user.index + 1}】${user.UserName}\n`)
+      res = await this.api('jdhealth_getTaskDetail', {"buildingId": "", "taskId": 6, "channelId": 1})
+      try {
+        let code: string = res.data.result.taskVos[0].assistTaskDetailVo.taskToken
+        console.log('助力码', code)
+        this.shareCodeSelf.push(code)
+        await this.runTimes(code)
+        await this.wait(1000)
+      } catch (e) {
+      }
     }
-  })
-  return data
+    this.o2s(this.shareCodeSelf, '内部助力码')
+
+    for (let user of users) {
+      this.user = user
+      this.shareCodePool = await this.getShareCodePool('health', 1)
+      let shareCode: string[] = Array.from(new Set([...this.shareCodeSelf, ...this.shareCodePool])), full: string[] = []
+
+      for (let code of shareCode) {
+        if (full.includes(code))
+          continue
+        console.log(`账号${user.index + 1} ${user.UserName} 去助力 ${code}`)
+        res = await this.api('jdhealth_collectScore', {"taskToken": code, "taskId": "6", "actionType": 0})
+        try {
+          if (res.data.bizMsg === '助力失败丨啊哦您今日的爱心值已爆棚，明天继续吧') {
+            break
+          } else if (res.data.bizMsg === '助力失败丨助力已满员！谢谢你哦~')
+            full.push(code)
+          else
+            console.log(res.data.bizMsg)
+        } catch (e) {
+          break
+        } finally {
+          await this.wait(3000)
+        }
+      }
+    }
+  }
 }
+
+new Health().init().then()

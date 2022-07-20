@@ -6,11 +6,15 @@
  * @param author 作者仓库等信息  例：`本脚本免费使用 By：xxx`
  * @returns {Promise<unknown>}
  */
-const querystring = require("querystring");
-const fs = require('fs');
-const {format} = require("date-fns");
+
 const $ = new Env();
+const dotenv = require('dotenv');
+const fs = require('fs');
+const querystring = require("querystring");
+const {format} = require("date-fns");
+
 const timeout = 15000;//超时时间(单位毫秒)
+dotenv.config({path: `${__dirname}/.env`});
 // =======================================微信server酱通知设置区域===========================================
 //此处填你申请的SCKEY.
 //(环境变量名 PUSH_KEY)
@@ -390,10 +394,10 @@ function tgBotNotify(text, desp) {
       const options = {
         url: `https://${TG_API_HOST}/bot${TG_BOT_TOKEN}/sendMessage`,
         json: {
-            chat_id: `${TG_USER_ID}`,
-            text: `${text}\n\n${desp}`,
-            disable_web_page_preview:true,
-          },
+          chat_id: `${TG_USER_ID}`,
+          text: `${text}\n\n${desp}`,
+          disable_web_page_preview: true,
+        },
         headers: {
           'Content-Type': 'application/json',
         },
@@ -447,7 +451,7 @@ function ddBotNotify(text, desp) {
       json: {
         "msgtype": "text",
         "text": {
-          "content": ` ${text}\n\n${desp}`
+          "content": `${text}\n\n${desp}`
         }
       },
       headers: {
