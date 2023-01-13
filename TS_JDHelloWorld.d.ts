@@ -12,12 +12,13 @@ declare class JDHelloWorld {
     constructor(scriptName?: string);
     getCookie(): Promise<void>;
     exceptCookie(filename?: string): string[];
-    get(url: string, headers?: any): Promise<unknown>;
+    get(url: string, headers?: any, params?: object): Promise<any>;
     post(url: string, data: any, headers?: any, params?: object): Promise<object | string>;
     wait(ms?: number): Promise<unknown>;
-    o2s(obj: object, title?: string): void;
+    o2s(msg: string | object, title?: string): void;
     getShareCodePool(key: string, num: number): Promise<string[]>;
     getshareCodeHW(key: string): Promise<string[]>;
+    getRandomWord(): string;
     getRandomNumberByRange(start: number, end: number): number;
     getRandomNumString(e: number): string;
     getEncStr(fn: string, body: {
@@ -25,7 +26,9 @@ declare class JDHelloWorld {
         taskType?: number;
     }): object;
     getSign(fn: string, body: object): Promise<string>;
-    cashDoSign(): Promise<unknown>;
+    getIosVer(): string;
+    getFp(): Promise<string>;
+    body(body: object): Promise<object>;
     run(son: {
         main: any;
         help?: any;

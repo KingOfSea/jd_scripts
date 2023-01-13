@@ -1,11 +1,12 @@
 /**
  * 京东-领现金
+ * cron: 30 7,10 * * *
  */
 
 import {User, JDHelloWorld} from "./TS_JDHelloWorld";
 
-class CASH extends JDHelloWorld {
-  cookie: string
+class Jd_cash_signin extends JDHelloWorld {
+  user: User
 
   constructor() {
     super();
@@ -19,13 +20,13 @@ class CASH extends JDHelloWorld {
     let sign = await this.getSign(fn, body)
     return await this.post(`https://api.m.jd.com/client.action?functionId=${fn}`, sign, {
       'Host': 'api.m.jd.com',
-      'Cookie': this.cookie,
-      'user-agent': 'jdapp;',
+      'Cookie': this.user.cookie,
+      'user-agent': this.user.UserAgent,
     })
   }
 
   async main(user: User) {
-    this.cookie = user.cookie
+    this.user = user
     let res: any = await this.api('cash_homePage', {})
     if (res.data.result.signedStatus !== 1) {
       console.log('今日未签到')
@@ -68,4 +69,4 @@ class CASH extends JDHelloWorld {
   }
 }
 
-new CASH().init().then().catch()
+new Jd_cash_signin().init().then()

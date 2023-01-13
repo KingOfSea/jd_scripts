@@ -1,6 +1,6 @@
 /**
  * 小程序-领现金-1.5
- * cron: 15 7,18 * * *
+ * cron: 15 14,15,19 * * *
  */
 
 import {User, JDHelloWorld} from "./TS_JDHelloWorld"
@@ -10,7 +10,7 @@ interface CODE {
   shareDate: string
 }
 
-class Jd_cash_wechat extends JDHelloWorld {
+class Jd_cash_help extends JDHelloWorld {
   user: User
   shareCodeSelf: CODE[] = []
 
@@ -20,16 +20,6 @@ class Jd_cash_wechat extends JDHelloWorld {
 
   async init() {
     await this.run(this)
-  }
-
-  async doSign() {
-    let body = await this.cashDoSign()
-    let data: any = await this.post('https://api.m.jd.com/client.action?functionId=cash_sign', body, {
-      'Host': 'api.m.jd.com',
-      'Cookie': this.user.cookie,
-      'user-agent': this.user.UserAgent,
-    })
-    console.log(data.data.bizMsg)
   }
 
   async api(fn: string, body: object) {
@@ -43,7 +33,7 @@ class Jd_cash_wechat extends JDHelloWorld {
     }), {
       'Host': 'api.m.jd.com',
       "Referer": "https://servicewechat.com/wx91d27dbf599dff74/621/page-frame.html",
-      'User-Agent': "Mozilla/5.0 (iPhone; CPU iPhone OS 11_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E217 MicroMessenger/6.8.0(0x16080000) NetType/WIFI Language/en Branch/Br_trunk MiniProgramEnv/Mac",
+      'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS ${this.getIosVer()} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E217 MicroMessenger/6.8.0(0x16080000) NetType/WIFI Language/en Branch/Br_trunk MiniProgramEnv/Mac`,
       'Cookie': this.user.cookie
     })
   }
@@ -53,11 +43,6 @@ class Jd_cash_wechat extends JDHelloWorld {
     let res: any
     try {
       res = await this.api('cash_mob_home', {"isLTRedPacket": "1"})
-      if (res.data.result.signedStatus !== 1) {
-        console.log('开始签到')
-        await this.doSign()
-        console.log('签到成功')
-      }
       for (let t of res.data.result.taskInfos) {
         if (t.doTimes !== t.times) {
           console.log(t.name)
@@ -66,14 +51,11 @@ class Jd_cash_wechat extends JDHelloWorld {
           res = await this.api('cash_mob_home', {"isLTRedPacket": "1"})
         }
       }
+      this.o2s(res)
 
-      if (new Date().getHours() >= 7 && new Date().getHours() <= 19 && res.data.result?.limitTimeRedPacket?.receiveStatus === '0') {
+      if (new Date().getHours() >= 11 && new Date().getHours() < 22) {
         res = await this.api('cash_join_limited_redpacket', {"id": 5, "level": 3})
-        if (res.data.bizCode === 0) {
-          console.log('开启成功')
-        } else {
-          console.log(res.data.bizMsg)
-        }
+        res.data.bizCode === 0 ? console.log('开启成功') : console.log(res.data.bizMsg)
 
         res = await this.api('cash_mob_home', {"isLTRedPacket": "1"})
         if (res.data.result.inviteCode && res.data.result.shareDate) {
@@ -81,10 +63,10 @@ class Jd_cash_wechat extends JDHelloWorld {
             inviteCode: res.data.result.inviteCode,
             shareDate: res.data.result.shareDate
           })
-          console.log('助力码', res.data.result.inviteCode)
+          console.log('助力码', res.data.result.inviteCode, res.data.result.shareDate)
         }
       } else {
-        console.log('不在时间范围内')
+        console.log('不在时间范围')
       }
     } catch (e) {
       console.log('error', e.message)
@@ -92,7 +74,7 @@ class Jd_cash_wechat extends JDHelloWorld {
   }
 
   async help(users: User[]) {
-    let shareCodeHW: any = [], shareCode: CODE[] = []
+    let shareCodeHW: any = [], shareCode: CODE[] = [], full: string[] = []
     this.o2s(this.shareCodeSelf, '内部助力')
     let res: any
 
@@ -100,7 +82,7 @@ class Jd_cash_wechat extends JDHelloWorld {
       try {
         this.user = user
         if (shareCodeHW.length === 0) {
-          shareCodeHW = this.getshareCodeHW('cash')
+          shareCodeHW = await this.getshareCodeHW('cash')
         }
         if (user.index === 0) {
           shareCode = [...shareCodeHW, ...this.shareCodeSelf]
@@ -110,8 +92,14 @@ class Jd_cash_wechat extends JDHelloWorld {
 
         for (let code of shareCode) {
           console.log(`账号${user.index + 1} ${user.UserName} 去助力 ${code.inviteCode}`)
+          if (full.includes(code.inviteCode)) {
+            console.log('full contains')
+            continue
+          }
           res = await this.api('redpack_limited_assist', {"inviteCode": code.inviteCode, "shareDate": code.shareDate})
           console.log(res.data?.result?.limitTimeAssist?.tips)
+          if (res.data?.result?.limitTimeAssist?.tips === '您来晚啦，您的好友已经领到全部奖励了')
+            full.push(code.inviteCode)
           if (res.data?.result?.limitTimeAssist?.assistCode === '207') {
             break
           }
@@ -127,7 +115,10 @@ class Jd_cash_wechat extends JDHelloWorld {
         console.log(`账号${user.index + 1} ${user.UserName}`)
         for (let i = 1; i < 5; i++) {
           res = await this.api('cash_open_limited_redpacket', {"node": i})
-          console.log(res.data)
+          // this.o2s(res)
+          console.log(res.data.bizMsg)
+          if (res.data.bizMsg === '无资格')
+            break
         }
       } catch (e) {
         console.log('error', e.message)
@@ -136,4 +127,4 @@ class Jd_cash_wechat extends JDHelloWorld {
   }
 }
 
-new Jd_cash_wechat().init().then()
+new Jd_cash_help().init().then()

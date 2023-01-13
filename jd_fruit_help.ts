@@ -7,159 +7,155 @@
  * cron: 35 0,3,5 * * *
  */
 
-import USER_AGENT, {get, getCookie, wait, o2s, getShareCodePool, getRandomNumberByRange} from './TS_USER_AGENTS'
-import {H5ST} from "./utils/h5st"
-import {getDate} from "date-fns"
-import {sendNotify} from './sendNotify'
+import {User, JDHelloWorld} from "./TS_JDHelloWorld"
+import {sendNotify} from "./sendNotify";
 
-let cookie: string = '', res: any = '', UserName: string, h5stTool: H5ST
-let shareCodeSelf: string[] = [], log: { help: string, runTimes: string } = {help: '', runTimes: ''}, message: string = ''
+class Jd_fruit_help extends JDHelloWorld {
+  user: User
+  shareCodeSelf: string[] = []
+  code2user: {} = {}
 
-!(async () => {
-  let cookiesArr: string[] = await getCookie()
-  for (let [index, value] of cookiesArr.entries()) {
-    try {
-      cookie = value
-      UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-      console.log(`\n开始【京东账号${index + 1}】${UserName}\n`)
-
-      h5stTool = new H5ST("0c010", USER_AGENT, process.env.FP_0C010 || "")
-      await h5stTool.__genAlgo()
-
-      res = await api('initForFarm', {"version": 11, "channel": 3})
-      if (res.code !== '0') {
-        console.log('初始化失败')
-        continue
-      }
-      console.log('助力码', res.farmUserPro.shareCode)
-      shareCodeSelf.push(res.farmUserPro.shareCode)
-
-      for (let i = 0; i < 5; i++) {
-        try {
-          let today: number = getDate(new Date())
-          res = await get(`https://api.jdsharecode.xyz/api/runTimes0701?activityId=farm&sharecode=${res.farmUserPro.shareCode}&today=${today}`)
-          console.log(res)
-          log.runTimes += `第${i + 1}次${res}\n`
-          break
-        } catch (e) {
-          console.log(`第${i + 1}次上报失败`, e)
-          log.runTimes += `第${i + 1}次上报失败 ${typeof e === 'object' ? JSON.stringify(e) : e}\n`
-          await wait(getRandomNumberByRange(10000, 30000))
-        }
-      }
-    } catch (e) {
-      console.log('error', e)
-      break
-    }
-    await wait(2000)
+  constructor() {
+    super("农场助力");
   }
 
-  o2s(shareCodeSelf, '内部互助')
-  let full: string[] = []
-  for (let [index, value] of cookiesArr.entries()) {
-    try {
-      cookie = value
-      UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-
-      h5stTool = new H5ST("0c010", USER_AGENT, process.env.FP_0C010 || "")
-      await h5stTool.__genAlgo()
-
-      let shareCodePool: string[] = await getShareCodePool('farm', 50)
-      let shareCode: string[] = Array.from(new Set([...shareCodeSelf, ...shareCodePool]))
-
-      for (let code of shareCode) {
-        console.log(`账号${index + 1} ${UserName} 去助力 ${code} ${shareCodeSelf.includes(code) ? "*内部*" : ""}`)
-        if (full.includes(code)) {
-          console.log('full contains')
-          continue
-        }
-        res = await api('initForFarm', {"mpin": "", "utm_campaign": "t_335139774", "utm_medium": "appshare", "shareCode": code, "utm_term": "Wxfriends", "utm_source": "iosapp", "imageUrl": "", "nickName": "", "version": 14, "channel": 2, "babelChannel": 0})
-        if (res.helpResult.code === '7') {
-          console.log('不给自己助力')
-        } else if (res.helpResult.code === '0') {
-          console.log('助力成功,获得', res.helpResult.salveHelpAddWater)
-          log.help += `助力成功 ${code} ${shareCodeSelf.includes(code) ? '*内部*' : ''}\n`
-        } else if (res.helpResult.code === '8') {
-          console.log('上限')
-          await wait(50000)
-          break
-        } else if (res.helpResult.code === '9') {
-          console.log('已助力')
-          log.help += `已助力 ${code} ${shareCodeSelf.includes(code) ? '*内部*' : ''}\n`
-        } else if (res.helpResult.code === '10') {
-          console.log('已满')
-          full.push(code)
-        } else if (res.helpResult.remainTimes === 0) {
-          console.log('上限')
-          await wait(10000)
-          break
-        }
-        await wait(10000)
-        if (res.helpResult.remainTimes === 0) {
-          console.log('上限')
-          await wait(5000)
-          break
-        }
-      }
-    } catch (e) {
-      console.log('error', e)
-    }
-    await wait(5000)
+  async init() {
+    await this.run(this)
   }
 
-  for (let [index, value] of cookiesArr.entries()) {
-    try {
-      cookie = value
-      UserName = decodeURIComponent(cookie.match(/pt_pin=([^;]*)/)![1])
-      console.log(`\n开始【京东账号${index + 1}】${UserName}\n`)
-
-      h5stTool = new H5ST("0c010", USER_AGENT, process.env.FP_0C010 || "")
-      await h5stTool.__genAlgo()
-
-      res = await api('farmAssistInit', {"version": 16, "channel": 1, "babelChannel": "121"})
-      let assistFriendList: number = res.assistFriendList.length
-
-      if (res.code !== '0') {
-        console.log('farmAssistInit Error')
-        continue
-      }
-      let farmAssistInit_waterEnergy: number = 0
-      for (let t of res.assistStageList) {
-        if (t.percentage === '100%' && t.stageStaus === 2) {
-          res = await api('receiveStageEnergy', {"version": 14, "channel": 1, "babelChannel": "120"})
-          await wait(3000)
-          farmAssistInit_waterEnergy += t.waterEnergy
-        } else if (t.stageStaus === 3) {
-          farmAssistInit_waterEnergy += t.waterEnergy
-        }
-      }
-      console.log('收到助力', assistFriendList)
-      console.log('助力已领取', farmAssistInit_waterEnergy)
-
-      message += `【助力已领取】  ${farmAssistInit_waterEnergy}\n\n`
-      message += '\n\n'
-    } catch (e) {
-      console.log('error', e)
-    }
-    await wait(10000)
+  randPhoneId() {
+    return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
   }
-  message && await sendNotify("农场助力", message)
-})()
 
-async function api(fn: string, body: object) {
-  let h5st: string = h5stTool.__genH5st({
-    'appid': 'wh5',
-    'body': JSON.stringify(body),
-    'client': 'apple',
-    'clientVersion': '10.2.4',
-    'functionId': fn,
-  })
-  return await get(`https://api.m.jd.com/client.action?functionId=${fn}&body=${JSON.stringify(body)}&appid=wh5&client=apple&clientVersion=11.0.4&h5st=${h5st}`, {
-    "Host": "api.m.jd.com",
-    "Origin": "https://carry.m.jd.com",
-    "User-Agent": USER_AGENT,
-    "Accept-Language": "zh-CN,zh-Hans;q=0.9",
-    "Referer": "https://carry.m.jd.com/",
-    "Cookie": cookie
-  })
+  async api(fn: string, body: object) {
+    return await this.get(`https://api.m.jd.com/api?functionId=${fn}&body=${encodeURIComponent(JSON.stringify(body))}&appid=wh5`, {
+      "Host": "api.m.jd.com",
+      "Accept": "*/*",
+      "Origin": "https://carry.m.jd.com",
+      "Accept-Encoding": "gzip, deflate, br",
+      "User-Agent": this.user.UserAgent,
+      "Accept-Language": "zh-CN,zh-Hans;q=0.9",
+      "Referer": "https://carry.m.jd.com/",
+      "Cookie": this.user.cookie
+    })
+  }
+
+  async main(user: User) {
+    this.user = user
+    let res: any
+    try {
+      res = await this.api('initForFarm', {"babelChannel": "121", "sid": "3c52b5f17ab2a42398939a27887eaf8w", "version": 18, "channel": 1})
+      if (res.code === '0') {
+        console.log('助力码', res.farmUserPro.shareCode)
+        this.shareCodeSelf.push(res.farmUserPro.shareCode)
+        this.code2user[this.user.UserName] = res.farmUserPro.shareCode
+      } else {
+        this.o2s(res, 'initForFarm error')
+        return {msg: `账号${this.user.index + 1} ${this.user.UserName}\n初始化失败\n${JSON.stringify(res)}`}
+      }
+    } catch (e) {
+      console.log(e.message)
+      await this.wait(5000)
+      return {msg: `账号${this.user.index + 1} ${this.user.UserName}\n运行出错\n${e.message}`}
+    }
+  }
+
+  async help(users: User[]) {
+    this.o2s(this.shareCodeSelf, '内部助力')
+    let res: any, full: string [] = [], message: string = ''
+    for (let user of users) {
+      try {
+        this.user = user
+        let myCode: string = this.code2user[this.user.UserName] ?? ""
+        let shareCodePool: string[] = await this.getShareCodePool('farm', 50)
+        let shareCode: string[] = [...this.shareCodeSelf, ...shareCodePool]
+        for (let code of shareCode) {
+          console.log(`账号${user.index + 1} ${user.UserName} 去助力 ${code}`)
+          if (code === myCode) {
+            console.log('self pass')
+            continue
+          }
+          if (full.includes(code)) {
+            console.log('full contains')
+            continue
+          }
+          res = await this.api('initForFarm', {
+            "imageUrl": "",
+            "nickName": "",
+            "shareCode": code,
+            "babelChannel": "3",
+            "version": 2,
+            "channel": 1
+          })
+          if (!(res.helpResult && res.helpResult.code)) {
+            this.o2s(res, '助力出错')
+          } else if (res.helpResult.code === '0') {
+            console.log('助力成功,获得', res.helpResult.salveHelpAddWater)
+            for (let i = 0; i < 5; i++) {
+              try {
+                let runTimes: string = await this.get(`https://sharecodepool.cnmb.win/api/runTimes0917?activityId=farm&sharecode=${myCode}&today=${Date.now().toString()}`)
+                console.log(runTimes)
+                break
+              } catch (e) {
+                console.log(e.message)
+                await this.wait(this.getRandomNumberByRange(10000, 20000))
+              }
+            }
+          } else if (res.helpResult.code === '7') {
+            console.log('不给自己助力')
+            this.user['code'] = code
+          } else if (res.helpResult.code === '9') {
+            console.log('已助力')
+          } else if (res.helpResult.code === '10') {
+            console.log('已满')
+            full.push(code)
+          }
+          if (res.helpResult.remainTimes === 0) {
+            console.log('上限')
+            await this.wait(10000)
+            break
+          }
+          await this.wait(10000)
+        }
+      } catch (e) {
+        console.log(e.message)
+        await this.wait(10000)
+      }
+      await this.wait(5000)
+    }
+
+    for (let user of users) {
+      try {
+        this.user = user
+        this.user.UserAgent = `jdapp;iPhone;10.2.0;${Math.ceil(Math.random() * 4 + 10)}.${Math.ceil(Math.random() * 4)};${this.randPhoneId()};network/4g;model/iPhone11,8;addressid/1188016812;appBuild/167724;jdSupportDarkMode/0;Mozilla/5.0 (iPhone; CPU iPhone OS ${this.getIosVer()} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1`
+        res = await this.api('farmAssistInit', {"version": 14, "channel": 1, "babelChannel": "120"})
+        if (res.code === '0') {
+          let assistFriendList: number = res.assistFriendList.length
+          let farmAssistInit_waterEnergy: number = 0
+          for (let t of res.assistStageList) {
+            if (t.stageStaus === 2) {
+              res = await this.api('receiveStageEnergy', {"version": 14, "channel": 1, "babelChannel": "120"})
+              console.log('收获助力💧', t.waterEnergy)
+              await this.wait(3000)
+              farmAssistInit_waterEnergy += t.waterEnergy
+            } else if (t.stageStaus === 3) {
+              farmAssistInit_waterEnergy += t.waterEnergy
+            }
+          }
+          console.log('收到助力', assistFriendList)
+          console.log('助力已领取', farmAssistInit_waterEnergy)
+          message += `账号${this.user.index + 1} ${this.user.UserName}\n收到助力${assistFriendList}\n助力已领取${farmAssistInit_waterEnergy}\n\n`
+        } else {
+          this.o2s(res, 'initForFarm error')
+        }
+      } catch (e) {
+        console.log(e.message)
+        await this.wait(5000)
+      }
+      await this.wait(5000)
+    }
+    message && await sendNotify("农场助力", message)
+  }
 }
+
+new Jd_fruit_help().init().then()
